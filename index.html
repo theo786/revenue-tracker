@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>매출 관리 — 수빈</title>
+<script type="importmap">
+{ "imports": { "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2" } }
+</script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e8eaf0;
+    --muted: #8b93a7;
+    --accent: #7c9cff;
+    --accent-2: #b07cff;
+    --danger: #ff6b8a;
+    --good: #6bff9c;
+    --sun: #ff6b8a;
+    --sat: #6bb5ff;
+    --kmong-bg: rgba(176, 124, 255, 0.06);
+    --wht-bg: rgba(255, 184, 107, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    font-size: 13px;
+  }
+
+  /* === 인증 오버레이 === */
+  .auth-overlay {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 9999;
+  }
+  .auth-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; max-width: 400px; width: 100%;
+  }
+  .auth-card h2 {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; margin: 0 0 8px; font-size: 24px;
+  }
+  .auth-card p { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+  .auth-card input {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; color: var(--text);
+    font-size: 15px; margin-bottom: 10px; font-family: inherit;
+  }
+  .auth-card input:focus { border-color: var(--accent); outline: none; }
+  .auth-btn {
+    width: 100%; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0e1018; border: 0; padding: 12px; border-radius: 10px;
+    font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .auth-msg { font-size: 13px; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; }
+  .auth-msg.err { background: rgba(255,107,138,.1); color: var(--danger); display: block; }
+  .auth-msg.ok { background: rgba(107,255,156,.1); color: var(--good); display: block; }
+  .auth-back { background: none; border: 0; color: var(--muted); font-size: 13px; cursor: pointer; padding: 8px; font-family: inherit; }
+
+  /* === 앱 === */
+  .wrap {
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(15, 17, 21, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    margin: -24px -20px 18px;
+    padding: 14px 20px 12px;
+  }
+  .header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 {
+    margin: 0; font-size: 22px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .header-right {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sync-label {
+    font-size: 11px; color: var(--muted);
+    transition: color 0.2s;
+  }
+  .sync-label.saving { color: var(--accent); }
+  .sync-label.saved { color: var(--good); }
+  .user-email {
+    font-size: 12px; color: var(--muted);
+  }
+  .logout-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+  .quick-nav {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;
+  }
+  .quick-nav button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .quick-nav button:hover {
+    color: var(--text); border-color: var(--accent);
+  }
+  .quick-nav button.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0e1018;
+    border-color: transparent;
+    font-weight: 700;
+  }
+  .view[hidden] { display: none; }
+  .controls {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 6px 10px;
+  }
+  .controls input[type="number"] {
+    background: transparent; border: 0; color: var(--text);
+    width: 60px; font-size: 16px; font-weight: 700; text-align: center;
+    outline: none; font-family: inherit;
+  }
+  .controls .label { color: var(--muted); font-size: 13px; }
+  .controls button {
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); padding: 4px 10px; border-radius: 6px;
+    cursor: pointer; font-size: 14px;
+  }
+  .controls button:hover { border-color: var(--accent); }
+
+  .grid-wrap { overflow-x: auto; }
+
+  .week {
+    display: grid;
+    grid-template-columns: 60px repeat(7, minmax(140px, 1fr)) 90px;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 14px;
+    min-width: 1100px;
+  }
+  .cell {
+    background: var(--panel);
+    padding: 4px 6px;
+    min-height: 32px;
+    display: flex; flex-direction: column;
+    font-size: 12px;
+  }
+  .cell.label {
+    align-items: center; justify-content: center;
+    font-weight: 700; color: var(--muted);
+    font-size: 12px; letter-spacing: 0.3px;
+    background: var(--panel-2);
+  }
+  .cell.day-header {
+    align-items: center; justify-content: center;
+    font-weight: 700; padding: 8px 4px;
+    background: var(--panel-2);
+    color: var(--muted);
+  }
+  .cell.day-header.sun { color: var(--sun); }
+  .cell.day-header.sat { color: var(--sat); }
+
+  .cell.date {
+    align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+    padding: 6px 4px; background: var(--panel-2);
+  }
+  .cell.date.muted {
+    opacity: 0.22;
+    background: var(--bg);
+  }
+  .cell.date.today {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0e1018;
+    font-size: 14px; font-weight: 800;
+    box-shadow: 0 0 0 2px var(--accent-2), 0 4px 12px rgba(176,124,255,0.35);
+    z-index: 3; position: relative;
+  }
+
+  .cell.kmong { background: color-mix(in srgb, var(--panel) 90%, var(--accent-2) 10%); }
+  .cell.wht { background: color-mix(in srgb, var(--panel) 90%, var(--accent) 10%); }
+
+  /* 상태 색상 */
+  .cell.status-done { background: rgba(255, 185, 60, 0.18) !important; }
+  .cell.status-paid { background: rgba(80, 220, 130, 0.18) !important; }
+  .cell.status-done.today-col { background: rgba(255, 185, 60, 0.28) !important; }
+  .cell.status-paid.today-col { background: rgba(80, 220, 130, 0.28) !important; }
+
+  /* 상태 버튼 */
+  .status-btns { display: flex; gap: 3px; margin-top: 3px; }
+  .status-btn {
+    font-size: 9px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer; line-height: 1.5;
+    transition: .12s;
+  }
+  .status-btn:hover { border-color: var(--accent); color: var(--text); }
+  .status-btn.done { border-color: rgba(255,185,60,0.6); color: rgb(255,185,60); background: rgba(255,185,60,0.12); }
+  .status-btn.paid { border-color: rgba(80,220,130,0.6); color: rgb(80,220,130); background: rgba(80,220,130,0.12); }
+
+  .cell.muted-day {
+    opacity: 0.18;
+    background: var(--bg) !important;
+    pointer-events: none;
+  }
+
+  /* 오늘 컬럼 강조 */
+  .cell.today-col {
+    background: rgba(176, 124, 255, 0.10) !important;
+  }
+  .cell.kmong.today-col { background: rgba(176, 124, 255, 0.18) !important; }
+  .cell.wht.today-col { background: rgba(176, 124, 255, 0.18) !important; }
+  .cell.day-header.today-col { color: #ffd700; }
+
+  .cell input,
+  .cell textarea {
+    background: transparent; border: 0; color: var(--text);
+    width: 100%; padding: 1px 2px; outline: none;
+    font-family: inherit; font-size: 12px;
+    border-radius: 3px;
+    line-height: 1.35;
+  }
+  .cell input:focus,
+  .cell textarea:focus { background: rgba(124,156,255,0.12); }
+  .cell input.client {
+    color: var(--muted); font-size: 11px;
+  }
+  .cell textarea.desc {
+    font-size: 12px;
+    resize: none;
+    overflow: hidden;
+    field-sizing: content;
+    min-height: 18px;
+  }
+  .amount-row {
+    display: flex; align-items: baseline; gap: 2px;
+    width: 100%;
+  }
+  .amount-row input.amount {
+    flex: 1; min-width: 0;
+    font-weight: 700; text-align: right;
+    color: var(--text); font-variant-numeric: tabular-nums;
+  }
+  .amount-suffix {
+    font-size: 10px; color: var(--muted);
+    flex-shrink: 0;
+  }
+  /* 빈 입력일 땐 원 숨김 */
+  .amount-row input.amount:placeholder-shown + .amount-suffix { visibility: hidden; }
+  .cell input::placeholder,
+  .cell textarea::placeholder { color: rgba(139,147,167,0.3); }
+
+  /* 주차 접기 토글 */
+  button.cell.collapse-toggle {
+    background: var(--panel-2);
+    border: 0;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  button.cell.collapse-toggle:hover { color: var(--accent); }
+  button.cell.collapse-toggle .arrow {
+    margin-right: 3px;
+    display: inline-block;
+    transition: transform 0.2s;
+  }
+  .week.collapsed button.cell.collapse-toggle {
+    color: var(--muted);
+  }
+
+  .cell.subtotal {
+    align-items: flex-end; justify-content: center;
+    font-weight: 700; font-variant-numeric: tabular-nums;
+    background: var(--panel-2);
+    padding: 8px 8px;
+  }
+  .cell.subtotal .stk-label {
+    font-size: 10px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .cell.subtotal .stk-value {
+    font-size: 13px;
+  }
+
+  /* Summary panel */
+  .bottom {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 14px;
+    margin-top: 18px;
+  }
+  @media (max-width: 900px) { .bottom { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 {
+    margin: 0 0 12px; font-size: 14px;
+    color: var(--muted); font-weight: 700;
+    letter-spacing: 0.4px; text-transform: uppercase;
+  }
+  .summary-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .stat .lbl { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .stat .val {
+    margin-top: 4px; font-size: 18px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat.total {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, rgba(124,156,255,0.10), rgba(176,124,255,0.10));
+    border-color: var(--accent);
+  }
+  .stat.total .val { font-size: 22px; color: var(--accent); }
+  .stat.net-total {
+    grid-column: 1 / -1;
+    background: rgba(107,255,156,0.06);
+    border-color: var(--good);
+  }
+  .stat.net-total .val { color: var(--good); }
+
+  .notes-list {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .notes-list textarea {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 38px;
+    outline: none;
+  }
+  .notes-list textarea:focus { border-color: var(--accent); }
+
+  .actions {
+    display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; cursor: pointer;
+    font-family: inherit;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.danger { color: var(--danger); }
+
+  .legend {
+    color: var(--muted); font-size: 12px; margin-bottom: 8px;
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .legend .dot {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 4px; vertical-align: middle;
+  }
+  .legend .k { background: color-mix(in srgb, var(--panel) 60%, var(--accent-2) 40%); }
+  .legend .w { background: color-mix(in srgb, var(--panel) 60%, var(--accent) 40%); }
+</style>
+</head>
+<body>
+
+<!-- ========== 인증 오버레이 ========== -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <h2>매출 관리</h2>
+    <p>태호 &amp; 수빈 공유 데이터</p>
+
+    <div id="authStep1">
+      <input type="email" id="authEmail" placeholder="이메일" autocomplete="email" />
+      <button class="auth-btn" id="sendBtn">인증코드 받기</button>
+    </div>
+
+    <div id="authStep2" style="display:none">
+      <p style="font-size:13px; color:var(--muted); margin: 0 0 12px;">이메일로 받은 6자리 코드를 입력하세요</p>
+      <input type="text" id="authCode" placeholder="123456" inputmode="numeric" />
+      <button class="auth-btn" id="verifyBtn">로그인</button>
+      <button class="auth-back" id="backBtn">← 다시 입력</button>
+    </div>
+
+    <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- ========== 메인 앱 ========== -->
+<div id="app" style="display:none">
+<div class="wrap">
+  <header>
+    <div class="header-row">
+      <h1>매출 관리 — 수빈</h1>
+      <div class="header-right">
+        <span class="sync-label" id="syncLabel"></span>
+        <span class="user-email" id="userEmail"></span>
+        <button class="logout-btn" id="logoutBtn">로그아웃</button>
+        <div class="controls">
+          <input type="number" id="year" min="2020" max="2099" />
+          <span class="label">년</span>
+          <button id="prevMonth" title="이전 달">◀</button>
+          <input type="number" id="month" min="1" max="12" />
+          <span class="label">월</span>
+          <button id="nextMonth" title="다음 달">▶</button>
+          <button id="todayBtn" title="이번 달로">오늘</button>
+        </div>
+      </div>
+    </div>
+    <nav class="quick-nav">
+      <button data-target="calendar">📅 캘린더</button>
+      <button data-target="summary">📊 월간 요약</button>
+      <button data-target="notes">📝 비고</button>
+      <button data-target="actions">⚙️ 백업/액션</button>
+    </nav>
+  </header>
+
+  <div class="view" id="view-calendar">
+    <div class="legend">
+      <span><span class="dot k"></span>크몽 (수수료 20%)</span>
+      <span><span class="dot w"></span>3.3% 원천징수</span>
+      <span>· 셀에 입력하면 자동 저장</span>
+    </div>
+    <div class="grid-wrap" id="calendarSection"></div>
+  </div>
+
+  <div class="view" id="view-summary" hidden>
+    <div class="panel" id="summarySection">
+      <h2>월간 요약</h2>
+      <div class="summary-grid" id="summaryGrid"></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-notes" hidden>
+    <div class="panel" id="notesSection">
+      <h2>비고 사항</h2>
+      <div class="notes-list" id="notesList"></div>
+    </div>
+  </div>
+
+  <div class="view" id="view-actions" hidden>
+    <div class="actions" id="actionsSection">
+      <button class="btn" id="exportBtn">📦 백업 (JSON)</button>
+      <button class="btn" id="importBtn">📂 가져오기</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none" />
+      <button class="btn danger" id="clearMonthBtn">이번 달 초기화</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<script type="module">
+import { createClient } from '@supabase/supabase-js';
+
+/* ============================================================
+ * Supabase 설정
+ * ============================================================ */
+const SUPABASE_URL = 'https://ksuiqtlrcenzedtlxyrb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzdWlxdGxyY2VuemVkdGx4eXJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTQwMDUsImV4cCI6MjA5MjY5MDAwNX0.njN2LI7ipPkTNsm6xoarNuI8yKWLAmSK1Uqvig7Qqpg';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ============================================================
+ * Storage (Supabase)
+ * ============================================================ */
+const Storage = {
+  _timer: null,
+  async pull() {
+    const { data, error } = await supabase
+      .from('revenue_tracker')
+      .select('data')
+      .eq('id', 'shared')
+      .maybeSingle();
+    if (error || !data) return {};
+    return data.data || {};
+  },
+  scheduleSave(data) {
+    setSyncLabel('saving');
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this.push(data), 600);
+  },
+  async push(data) {
+    await supabase
+      .from('revenue_tracker')
+      .upsert({ id: 'shared', data, updated_at: new Date().toISOString() });
+    setSyncLabel('saved');
+  }
+};
+
+/* ============================================================
+ * 동기화 상태 표시
+ * ============================================================ */
+function setSyncLabel(state) {
+  const el = document.getElementById('syncLabel');
+  if (!el) return;
+  if (state === 'saving') {
+    el.textContent = '저장 중...';
+    el.className = 'sync-label saving';
+  } else if (state === 'saved') {
+    el.textContent = '동기화됨';
+    el.className = 'sync-label saved';
+    clearTimeout(window._syncClear);
+    window._syncClear = setTimeout(() => {
+      el.textContent = '';
+      el.className = 'sync-label';
+    }, 2000);
+  }
+}
+
+/* ============================================================
+ * State
+ * ============================================================ */
+const today = new Date();
+const state = {
+  year: today.getFullYear(),
+  month: today.getMonth() + 1,
+  data: {}
+};
+
+const KMONG_RATE = 0.20;
+const WHT_RATE = 0.033;
+const KMONG_SLOTS = 2;
+const WHT_SLOTS = 3;
+const NOTES_COUNT = 5;
+
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function monthKey(y, m) { return `${y}-${m}`; }
+function dateKey(d) {
+  return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+}
+
+function getMonthDataFor(year, month) {
+  const k = monthKey(year, month);
+  if (!state.data[k]) {
+    state.data[k] = { entries: {}, notes: Array(NOTES_COUNT).fill('') };
+  }
+  const md = state.data[k];
+  if (!Array.isArray(md.notes)) md.notes = Array(NOTES_COUNT).fill('');
+  while (md.notes.length < NOTES_COUNT) md.notes.push('');
+  return md;
+}
+
+function getMonthData() {
+  return getMonthDataFor(state.year, state.month);
+}
+
+function getEntry(date, cat, slot) {
+  const k = monthKey(date.getFullYear(), date.getMonth() + 1);
+  const md = state.data[k];
+  if (!md || !md.entries) return { client: '', desc: '', amount: 0 };
+  const key = dateKey(date);
+  return md.entries[key]?.[cat]?.[slot] || { client: '', desc: '', amount: 0 };
+}
+
+function setEntryField(date, cat, slot, field, value) {
+  const md = getMonthDataFor(date.getFullYear(), date.getMonth() + 1);
+  const key = dateKey(date);
+  if (!md.entries[key]) md.entries[key] = { kmong: [], wht: [] };
+  if (!md.entries[key][cat]) md.entries[key][cat] = [];
+  if (!md.entries[key][cat][slot]) {
+    md.entries[key][cat][slot] = { client: '', desc: '', amount: 0 };
+  }
+  if (field === 'amount') value = parseInt(value.replace(/[^\d-]/g, ''), 10) || 0;
+  md.entries[key][cat][slot][field] = value;
+  Storage.scheduleSave(state.data);
+  updateSummary();
+}
+
+/* ============================================================
+ * 캘린더 생성
+ * ============================================================ */
+function generateWeeks(year, month) {
+  const firstOfMonth = new Date(year, month - 1, 1);
+  const startWeekday = firstOfMonth.getDay();
+  const startDate = new Date(year, month - 1, 1 - startWeekday);
+
+  const lastOfMonth = new Date(year, month, 0);
+  const endWeekday = lastOfMonth.getDay();
+  const endDate = new Date(year, month - 1, lastOfMonth.getDate() + (6 - endWeekday));
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const totalDays = Math.round((endDate - startDate) / dayMs) + 1;
+  const weeksNeeded = totalDays / 7;
+
+  const weeks = [];
+  for (let w = 0; w < weeksNeeded; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const dt = new Date(startDate);
+      dt.setDate(startDate.getDate() + w * 7 + d);
+      week.push(dt);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+function isCurrentMonth(d) {
+  return d.getFullYear() === state.year && (d.getMonth() + 1) === state.month;
+}
+function isToday(d) {
+  const t = new Date();
+  return d.getFullYear() === t.getFullYear() &&
+         d.getMonth() === t.getMonth() &&
+         d.getDate() === t.getDate();
+}
+
+/* ============================================================
+ * 렌더링
+ * ============================================================ */
+function fmt(num) {
+  if (!num) return '';
+  return num.toLocaleString('ko-KR');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderCalendar() {
+  const weeks = generateWeeks(state.year, state.month);
+  const wrap = document.getElementById('calendarSection');
+  wrap.innerHTML = weeks.map((w, i) => renderWeek(w, i)).join('');
+  attachInputEvents();
+}
+
+const collapsedWeeks = new Set();
+function weekCollapseKey(idx) { return `${monthKey(state.year, state.month)}-${idx}`; }
+function isCollapsed(idx) { return collapsedWeeks.has(weekCollapseKey(idx)); }
+function toggleCollapse(idx) {
+  const k = weekCollapseKey(idx);
+  if (collapsedWeeks.has(k)) collapsedWeeks.delete(k);
+  else collapsedWeeks.add(k);
+  renderCalendar();
+}
+
+function entryCellHtml(d, cat, s) {
+  const inMonth = isCurrentMonth(d);
+  const muted = inMonth ? '' : 'muted-day';
+  const tdyCol = isToday(d) ? 'today-col' : '';
+  const e = getEntry(d, cat, s);
+  const dk = dateKey(d);
+  const tab = inMonth ? '' : 'tabindex="-1"';
+  const status = e.status || '';
+  const statusCls = status === 'paid' ? 'status-paid' : status === 'done' ? 'status-done' : '';
+  const doneCls = status === 'done' ? 'done' : status === 'paid' ? 'paid' : '';
+  const paidCls = status === 'paid' ? 'paid' : '';
+  const doneLabel = status === 'paid' ? '작업완료 ✓' : status === 'done' ? '작업완료 ✓' : '작업완료';
+  const paidLabel = status === 'paid' ? '입금완료 ✓' : '입금완료';
+  return `
+    <div class="cell ${cat} ${muted} ${tdyCol} ${statusCls}">
+      <input class="client" type="text" placeholder="클라이언트" data-date="${dk}" data-cat="${cat}" data-slot="${s}" data-field="client" value="${escapeHtml(e.client)}" ${tab} />
+      <textarea class="desc" rows="1" placeholder="작업 내용" data-date="${dk}" data-cat="${cat}" data-slot="${s}" data-field="desc" ${tab}>${escapeHtml(e.desc)}</textarea>
+      <div class="amount-row">
+        <input class="amount" type="text" inputmode="numeric" placeholder="0" data-date="${dk}" data-cat="${cat}" data-slot="${s}" data-field="amount" value="${e.amount?fmt(e.amount):''}" ${tab} />
+        <span class="amount-suffix">원</span>
+      </div>
+      ${inMonth ? `<div class="status-btns">
+        <button class="status-btn ${doneCls}" data-date="${dk}" data-cat="${cat}" data-slot="${s}" data-action="done">${doneLabel}</button>
+        <button class="status-btn ${paidCls}" data-date="${dk}" data-cat="${cat}" data-slot="${s}" data-action="paid">${paidLabel}</button>
+      </div>` : ''}
+    </div>
+  `;
+}
+
+function renderWeek(week, weekIndex) {
+  const collapsed = isCollapsed(weekIndex);
+
+  let kmongTotal = 0, whtTotal = 0;
+  for (const d of week) {
+    if (!isCurrentMonth(d)) continue;
+    const k = dateKey(d);
+    const md = getMonthData();
+    const e = md.entries[k];
+    if (!e) continue;
+    for (const c of (e.kmong || [])) kmongTotal += +c?.amount || 0;
+    for (const c of (e.wht || [])) whtTotal += +c?.amount || 0;
+  }
+  const weekTotal = kmongTotal + whtTotal;
+
+  let html = `<div class="week ${collapsed ? 'collapsed' : ''}">`;
+
+  html += `<button class="cell label collapse-toggle" data-week-idx="${weekIndex}" title="${collapsed ? '펼치기' : '접기'}"><span class="arrow">${collapsed ? '▶' : '▼'}</span>${weekIndex+1}주</button>`;
+  for (let i = 0; i < 7; i++) {
+    const cls = i === 0 ? 'sun' : i === 6 ? 'sat' : '';
+    const tdyCol = (week[i] && isToday(week[i])) ? 'today-col' : '';
+    html += `<div class="cell day-header ${cls} ${tdyCol}">${DAY_NAMES[i]}</div>`;
+  }
+  html += `<div class="cell label">${collapsed ? '주합계' : '소계'}</div>`;
+
+  html += `<div class="cell label">날짜</div>`;
+  for (const d of week) {
+    const muted = isCurrentMonth(d) ? '' : 'muted';
+    const tdy = isToday(d) ? 'today' : '';
+    const tdyCol = isToday(d) ? 'today-col' : '';
+    html += `<div class="cell date ${muted} ${tdy} ${tdyCol}">${d.getMonth()+1}.${d.getDate()}</div>`;
+  }
+  if (collapsed) {
+    html += `<div class="cell subtotal">
+      <span class="stk-label">합계</span>
+      <span class="stk-value">${fmt(weekTotal)}</span>
+    </div>`;
+  } else {
+    html += `<div class="cell label">소계</div>`;
+  }
+
+  if (!collapsed) {
+    for (let s = 0; s < WHT_SLOTS; s++) {
+      if (s === 0) html += `<div class="cell label" style="grid-row: span ${WHT_SLOTS}">3.3%<br>원천</div>`;
+      for (const d of week) html += entryCellHtml(d, 'wht', s);
+      if (s === 0) {
+        html += `<div class="cell subtotal" style="grid-row: span ${WHT_SLOTS}">
+          <span class="stk-label">원천</span>
+          <span class="stk-value">${fmt(whtTotal)}</span>
+        </div>`;
+      }
+    }
+    for (let s = 0; s < KMONG_SLOTS; s++) {
+      if (s === 0) html += `<div class="cell label" style="grid-row: span ${KMONG_SLOTS}">크몽</div>`;
+      for (const d of week) html += entryCellHtml(d, 'kmong', s);
+      if (s === 0) {
+        html += `<div class="cell subtotal" style="grid-row: span ${KMONG_SLOTS}">
+          <span class="stk-label">크몽</span>
+          <span class="stk-value">${fmt(kmongTotal)}</span>
+        </div>`;
+      }
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight + 2) + 'px';
+}
+
+function attachInputEvents() {
+  document.querySelectorAll('#calendarSection input, #calendarSection textarea').forEach(el => {
+    el.addEventListener('input', () => {
+      const { date, cat, slot, field } = el.dataset;
+      const [y, m, d] = date.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      setEntryField(dt, cat, +slot, field, el.value);
+      if (el.tagName === 'TEXTAREA') autoResize(el);
+    });
+  });
+  document.querySelectorAll('#calendarSection textarea').forEach(autoResize);
+
+  document.querySelectorAll('#calendarSection input.amount').forEach(input => {
+    input.addEventListener('blur', () => {
+      const num = parseInt(input.value.replace(/[^\d-]/g, ''), 10);
+      input.value = num ? fmt(num) : '';
+      renderCalendar();
+    });
+    input.addEventListener('focus', () => {
+      const num = parseInt(input.value.replace(/[^\d-]/g, ''), 10);
+      input.value = num ? String(num) : '';
+    });
+  });
+
+  document.querySelectorAll('.collapse-toggle').forEach(btn => {
+    btn.addEventListener('click', () => toggleCollapse(+btn.dataset.weekIdx));
+  });
+
+  document.querySelectorAll('.status-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { date, cat, slot, action } = btn.dataset;
+      const [y, m, d] = date.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const current = getEntry(dt, cat, +slot).status || '';
+      const next = current === action ? '' : action;
+      setEntryField(dt, cat, +slot, 'status', next);
+      renderCalendar();
+    });
+  });
+}
+
+/* ============================================================
+ * 요약 / 비고
+ * ============================================================ */
+function calcMonthTotals() {
+  const md = getMonthData();
+  let kmong = 0, wht = 0;
+  for (const dk in md.entries) {
+    const [y, m] = dk.split('-').map(Number);
+    if (y !== state.year || m !== state.month) continue;
+    const e = md.entries[dk];
+    for (const c of (e.kmong || [])) kmong += +c?.amount || 0;
+    for (const c of (e.wht || [])) wht += +c?.amount || 0;
+  }
+  const kmongNet = Math.round(kmong * (1 - KMONG_RATE));
+  const whtNet = Math.round(wht * (1 - WHT_RATE));
+  return {
+    kmong, wht,
+    total: kmong + wht,
+    kmongNet, whtNet,
+    netTotal: kmongNet + whtNet
+  };
+}
+
+function renderSummary() {
+  const t = calcMonthTotals();
+  const stats = [
+    { lbl: '월간 매출 총합 (세금 전)', val: t.total, cls: 'total' },
+    { lbl: '크몽 매출', val: t.kmong },
+    { lbl: '3.3% 원천징수 매출', val: t.wht },
+    { lbl: '크몽 순이익 (-20%)', val: t.kmongNet },
+    { lbl: '원천징수 순이익 (-3.3%)', val: t.whtNet },
+    { lbl: '월간 순이익 (세금 다 떼고)', val: t.netTotal, cls: 'net-total' },
+  ];
+  document.getElementById('summaryGrid').innerHTML =
+    stats.map(s => `
+      <div class="stat ${s.cls||''}">
+        <div class="lbl">${s.lbl}</div>
+        <div class="val">${fmt(s.val)}<span style="font-size:11px; color:var(--muted); font-weight:500"> 원</span></div>
+      </div>
+    `).join('');
+}
+
+function renderNotes() {
+  const md = getMonthData();
+  document.getElementById('notesList').innerHTML =
+    md.notes.map((n, i) => `
+      <textarea data-idx="${i}" rows="1" placeholder="비고 ${i+1}">${escapeHtml(n)}</textarea>
+    `).join('');
+  document.querySelectorAll('#notesList textarea').forEach(t => {
+    t.addEventListener('input', () => {
+      const md = getMonthData();
+      md.notes[+t.dataset.idx] = t.value;
+      Storage.scheduleSave(state.data);
+    });
+  });
+}
+
+function updateSummary() {
+  renderSummary();
+}
+
+/* ============================================================
+ * 컨트롤
+ * ============================================================ */
+function setMonth(y, m) {
+  if (m < 1) { y -= 1; m = 12; }
+  if (m > 12) { y += 1; m = 1; }
+  state.year = y;
+  state.month = m;
+  document.getElementById('year').value = y;
+  document.getElementById('month').value = m;
+  renderAll();
+}
+
+function renderAll() {
+  renderCalendar();
+  renderSummary();
+  renderNotes();
+}
+
+document.getElementById('year').addEventListener('change', e => {
+  setMonth(parseInt(e.target.value, 10) || state.year, state.month);
+});
+document.getElementById('month').addEventListener('change', e => {
+  setMonth(state.year, parseInt(e.target.value, 10) || state.month);
+});
+document.getElementById('prevMonth').addEventListener('click', () => setMonth(state.year, state.month - 1));
+document.getElementById('nextMonth').addEventListener('click', () => setMonth(state.year, state.month + 1));
+document.getElementById('todayBtn').addEventListener('click', () => {
+  const t = new Date();
+  setMonth(t.getFullYear(), t.getMonth() + 1);
+});
+
+/* ============================================================
+ * 백업 / 초기화
+ * ============================================================ */
+document.getElementById('clearMonthBtn').addEventListener('click', () => {
+  if (!confirm(`${state.year}년 ${state.month}월 데이터를 모두 지울까요?`)) return;
+  if (!confirm('정말요? 되돌릴 수 없습니다.')) return;
+  const typed = prompt('확인을 위해 "초기화" 라고 입력하세요.');
+  if (typed === null || typed.trim() !== '초기화') {
+    if (typed !== null) alert('취소되었습니다.');
+    return;
+  }
+  delete state.data[monthKey(state.year, state.month)];
+  Storage.scheduleSave(state.data);
+  renderAll();
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  a.href = url; a.download = `revenue-tracker-${date}.json`; a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (typeof data !== 'object' || Array.isArray(data)) throw new Error('형식 오류');
+      const merge = confirm(`데이터를 가져옵니다.\n확인 = 기존 데이터에 병합 (월별로 덮어씀)\n취소 = 기존 데이터 모두 삭제 후 교체`);
+      state.data = merge ? { ...state.data, ...data } : data;
+      Storage.scheduleSave(state.data);
+      renderAll();
+      alert('가져오기 완료');
+    } catch (err) {
+      alert('가져오기 실패: ' + err.message);
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+});
+
+/* 탭 전환 */
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.hidden = true);
+  const target = document.getElementById('view-' + name);
+  if (target) target.hidden = false;
+  document.querySelectorAll('.quick-nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.target === name);
+  });
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+document.querySelectorAll('.quick-nav button').forEach(btn => {
+  btn.addEventListener('click', () => showView(btn.dataset.target));
+});
+
+/* ============================================================
+ * 인증
+ * ============================================================ */
+let pendingEmail = '';
+
+function showAuthStep(n) {
+  document.getElementById('authStep1').style.display = n === 1 ? 'block' : 'none';
+  document.getElementById('authStep2').style.display = n === 2 ? 'block' : 'none';
+}
+
+function showAuthMsg(t, type) {
+  const el = document.getElementById('authMsg');
+  el.textContent = t;
+  el.className = 'auth-msg ' + (type || '');
+}
+
+document.getElementById('sendBtn').addEventListener('click', async () => {
+  const email = document.getElementById('authEmail').value.trim();
+  if (!email || !/.+@.+\..+/.test(email)) return showAuthMsg('올바른 이메일을 입력해주세요', 'err');
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true; btn.textContent = '전송 중…';
+  const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  btn.disabled = false; btn.textContent = '인증코드 받기';
+  if (error) return showAuthMsg('실패: ' + error.message, 'err');
+  pendingEmail = email;
+  document.getElementById('authMsg').className = 'auth-msg';
+  showAuthStep(2);
+});
+
+document.getElementById('verifyBtn').addEventListener('click', async () => {
+  const code = document.getElementById('authCode').value.trim();
+  if (!/^\d{4,10}$/.test(code)) return showAuthMsg('숫자 코드를 입력해주세요', 'err');
+  const btn = document.getElementById('verifyBtn');
+  btn.disabled = true; btn.textContent = '확인 중…';
+  const { error } = await supabase.auth.verifyOtp({ email: pendingEmail, token: code, type: 'email' });
+  btn.disabled = false; btn.textContent = '로그인';
+  if (error) showAuthMsg('인증 실패: ' + error.message, 'err');
+});
+
+document.getElementById('backBtn').addEventListener('click', () => {
+  showAuthStep(1);
+  document.getElementById('authMsg').className = 'auth-msg';
+});
+
+document.getElementById('authEmail').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sendBtn').click(); }
+});
+document.getElementById('authCode').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('verifyBtn').click(); }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+function showApp(on) {
+  document.getElementById('authOverlay').style.display = on ? 'none' : 'flex';
+  document.getElementById('app').style.display = on ? 'block' : 'none';
+}
+
+/* ============================================================
+ * 앱 초기화
+ * ============================================================ */
+async function initApp(user) {
+  document.getElementById('userEmail').textContent = user.email || '';
+  showApp(true);
+  showView('calendar');
+  state.data = await Storage.pull();
+  setMonth(state.year, state.month);
+  setSyncLabel('saved');
+}
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
+  if (session?.user) {
+    initApp(session.user);
+  } else {
+    showApp(false);
+    showAuthStep(1);
+  }
+});
+
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) initApp(session.user);
+  else showApp(false);
+})();
+</script>
+</body>
+</html>
