@@ -169,10 +169,12 @@
   .cell.wht { background: color-mix(in srgb, var(--panel) 90%, var(--accent) 10%); }
 
   /* 상태 색상 */
-  .cell.status-done { background: rgba(255, 185, 60, 0.18) !important; }
-  .cell.status-paid { background: rgba(80, 220, 130, 0.18) !important; }
-  .cell.status-done.today-col { background: rgba(255, 185, 60, 0.28) !important; }
-  .cell.status-paid.today-col { background: rgba(80, 220, 130, 0.28) !important; }
+  .cell.status-done { background: rgba(255, 185, 60, 0.15) !important; }
+  .cell.status-paid { background: rgba(80, 220, 130, 0.15) !important; }
+  .cell.status-both { background: rgba(80, 220, 130, 0.22) !important; }
+  .cell.status-done.today-col { background: rgba(255, 185, 60, 0.25) !important; }
+  .cell.status-paid.today-col { background: rgba(80, 220, 130, 0.25) !important; }
+  .cell.status-both.today-col { background: rgba(80, 220, 130, 0.30) !important; }
 
   /* 상태 버튼 */
   .status-btns { display: flex; gap: 3px; margin-top: 3px; }
@@ -184,6 +186,12 @@
   .status-btn:hover { border-color: var(--accent); color: var(--text); }
   .status-btn.done { border-color: rgba(255,185,60,0.6); color: rgb(255,185,60); background: rgba(255,185,60,0.12); }
   .status-btn.paid { border-color: rgba(80,220,130,0.6); color: rgb(80,220,130); background: rgba(80,220,130,0.12); }
+
+  /* 행 접기 */
+  .cell.label.row-label { cursor: pointer; gap: 4px; }
+  .cell.label.row-label:hover { color: var(--accent); }
+  .row-toggle-arrow { font-size: 8px; opacity: .6; }
+  .row-collapsed-cell { min-height: 8px !important; padding: 0 !important; opacity: .25; pointer-events: none; }
 
   .cell.muted-day {
     opacity: 0.18;
@@ -609,6 +617,16 @@ function toggleCollapse(idx) {
   renderCalendar();
 }
 
+const collapsedRows = new Set();
+function rowKey(weekIdx, cat) { return `${monthKey(state.year, state.month)}-${weekIdx}-${cat}`; }
+function isRowCollapsed(weekIdx, cat) { return collapsedRows.has(rowKey(weekIdx, cat)); }
+function toggleRowCollapse(weekIdx, cat) {
+  const k = rowKey(weekIdx, cat);
+  if (collapsedRows.has(k)) collapsedRows.delete(k);
+  else collapsedRows.add(k);
+  renderCalendar();
+}
+
 function entryCellHtml(d, cat, s) {
   const inMonth = isCurrentMonth(d);
   const muted = inMonth ? '' : 'muted-day';
@@ -616,12 +634,13 @@ function entryCellHtml(d, cat, s) {
   const e = getEntry(d, cat, s);
   const dk = dateKey(d);
   const tab = inMonth ? '' : 'tabindex="-1"';
-  const status = e.status || '';
-  const statusCls = status === 'paid' ? 'status-paid' : status === 'done' ? 'status-done' : '';
-  const doneCls = status === 'done' ? 'done' : status === 'paid' ? 'paid' : '';
-  const paidCls = status === 'paid' ? 'paid' : '';
-  const doneLabel = status === 'paid' ? '작업완료 ✓' : status === 'done' ? '작업완료 ✓' : '작업완료';
-  const paidLabel = status === 'paid' ? '입금완료 ✓' : '입금완료';
+  const done = !!e.done;
+  const paid = !!e.paid;
+  const statusCls = (done && paid) ? 'status-both' : paid ? 'status-paid' : done ? 'status-done' : '';
+  const doneCls = done ? 'done' : '';
+  const paidCls = paid ? 'paid' : '';
+  const doneLabel = done ? '작업완료 ✓' : '작업완료';
+  const paidLabel = paid ? '입금완료 ✓' : '입금완료';
   return `
     <div class="cell ${cat} ${muted} ${tdyCol} ${statusCls}">
       <input class="client" type="text" placeholder="클라이언트" data-date="${dk}" data-cat="${cat}" data-slot="${s}" data-field="client" value="${escapeHtml(e.client)}" ${tab} />
@@ -680,24 +699,42 @@ function renderWeek(week, weekIndex) {
   }
 
   if (!collapsed) {
-    for (let s = 0; s < WHT_SLOTS; s++) {
-      if (s === 0) html += `<div class="cell label" style="grid-row: span ${WHT_SLOTS}">3.3%<br>원천</div>`;
-      for (const d of week) html += entryCellHtml(d, 'wht', s);
-      if (s === 0) {
-        html += `<div class="cell subtotal" style="grid-row: span ${WHT_SLOTS}">
-          <span class="stk-label">원천</span>
-          <span class="stk-value">${fmt(whtTotal)}</span>
-        </div>`;
+    const whtCollapsed = isRowCollapsed(weekIndex, 'wht');
+    const kmongCollapsed = isRowCollapsed(weekIndex, 'kmong');
+
+    // 3.3% 원천 행
+    if (whtCollapsed) {
+      html += `<div class="cell label row-label" data-row-toggle="${weekIndex}-wht" title="펼치기"><span class="row-toggle-arrow">▶</span> 3.3% 원천</div>`;
+      for (let i = 0; i < 7; i++) html += `<div class="cell wht row-collapsed-cell"></div>`;
+      html += `<div class="cell subtotal row-collapsed-cell"><span class="stk-value" style="font-size:11px;">${fmt(whtTotal)||'-'}</span></div>`;
+    } else {
+      for (let s = 0; s < WHT_SLOTS; s++) {
+        if (s === 0) html += `<div class="cell label row-label" style="grid-row: span ${WHT_SLOTS}" data-row-toggle="${weekIndex}-wht" title="접기"><span class="row-toggle-arrow">▼</span> 3.3%<br>원천</div>`;
+        for (const d of week) html += entryCellHtml(d, 'wht', s);
+        if (s === 0) {
+          html += `<div class="cell subtotal" style="grid-row: span ${WHT_SLOTS}">
+            <span class="stk-label">원천</span>
+            <span class="stk-value">${fmt(whtTotal)}</span>
+          </div>`;
+        }
       }
     }
-    for (let s = 0; s < KMONG_SLOTS; s++) {
-      if (s === 0) html += `<div class="cell label" style="grid-row: span ${KMONG_SLOTS}">크몽</div>`;
-      for (const d of week) html += entryCellHtml(d, 'kmong', s);
-      if (s === 0) {
-        html += `<div class="cell subtotal" style="grid-row: span ${KMONG_SLOTS}">
-          <span class="stk-label">크몽</span>
-          <span class="stk-value">${fmt(kmongTotal)}</span>
-        </div>`;
+
+    // 크몽 행
+    if (kmongCollapsed) {
+      html += `<div class="cell label row-label" data-row-toggle="${weekIndex}-kmong" title="펼치기"><span class="row-toggle-arrow">▶</span> 크몽</div>`;
+      for (let i = 0; i < 7; i++) html += `<div class="cell kmong row-collapsed-cell"></div>`;
+      html += `<div class="cell subtotal row-collapsed-cell"><span class="stk-value" style="font-size:11px;">${fmt(kmongTotal)||'-'}</span></div>`;
+    } else {
+      for (let s = 0; s < KMONG_SLOTS; s++) {
+        if (s === 0) html += `<div class="cell label row-label" style="grid-row: span ${KMONG_SLOTS}" data-row-toggle="${weekIndex}-kmong" title="접기"><span class="row-toggle-arrow">▼</span> 크몽</div>`;
+        for (const d of week) html += entryCellHtml(d, 'kmong', s);
+        if (s === 0) {
+          html += `<div class="cell subtotal" style="grid-row: span ${KMONG_SLOTS}">
+            <span class="stk-label">크몽</span>
+            <span class="stk-value">${fmt(kmongTotal)}</span>
+          </div>`;
+        }
       }
     }
   }
@@ -744,10 +781,16 @@ function attachInputEvents() {
       const { date, cat, slot, action } = btn.dataset;
       const [y, m, d] = date.split('-').map(Number);
       const dt = new Date(y, m - 1, d);
-      const current = getEntry(dt, cat, +slot).status || '';
-      const next = current === action ? '' : action;
-      setEntryField(dt, cat, +slot, 'status', next);
+      const entry = getEntry(dt, cat, +slot);
+      setEntryField(dt, cat, +slot, action, !entry[action]);
       renderCalendar();
+    });
+  });
+
+  document.querySelectorAll('[data-row-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const [weekIdx, cat] = el.dataset.rowToggle.split('-');
+      toggleRowCollapse(+weekIdx, cat);
     });
   });
 }
