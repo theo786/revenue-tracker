@@ -34,39 +34,6 @@
     font-size: 13px;
   }
 
-  /* === 인증 오버레이 === */
-  .auth-overlay {
-    position: fixed; inset: 0; background: var(--bg);
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px; z-index: 9999;
-  }
-  .auth-card {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 16px; padding: 32px; max-width: 400px; width: 100%;
-  }
-  .auth-card h2 {
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text; margin: 0 0 8px; font-size: 24px;
-  }
-  .auth-card p { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
-  .auth-card input {
-    width: 100%; background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px 14px; color: var(--text);
-    font-size: 15px; margin-bottom: 10px; font-family: inherit;
-  }
-  .auth-card input:focus { border-color: var(--accent); outline: none; }
-  .auth-btn {
-    width: 100%; background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    color: #0e1018; border: 0; padding: 12px; border-radius: 10px;
-    font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit;
-  }
-  .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-  .auth-msg { font-size: 13px; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; }
-  .auth-msg.err { background: rgba(255,107,138,.1); color: var(--danger); display: block; }
-  .auth-msg.ok { background: rgba(107,255,156,.1); color: var(--good); display: block; }
-  .auth-back { background: none; border: 0; color: var(--muted); font-size: 13px; cursor: pointer; padding: 8px; font-family: inherit; }
-
   /* === 앱 === */
   .wrap {
     max-width: 1500px;
@@ -104,15 +71,6 @@
   }
   .sync-label.saving { color: var(--accent); }
   .sync-label.saved { color: var(--good); }
-  .user-email {
-    font-size: 12px; color: var(--muted);
-  }
-  .logout-btn {
-    background: none; border: 1px solid var(--border); color: var(--muted);
-    padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
-    font-family: inherit;
-  }
-  .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
   .quick-nav {
     display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;
   }
@@ -405,38 +363,14 @@
 </head>
 <body>
 
-<!-- ========== 인증 오버레이 ========== -->
-<div class="auth-overlay" id="authOverlay">
-  <div class="auth-card">
-    <h2>매출 관리</h2>
-    <p>태호 &amp; 수빈 공유 데이터</p>
-
-    <div id="authStep1">
-      <input type="email" id="authEmail" placeholder="이메일" autocomplete="email" />
-      <button class="auth-btn" id="sendBtn">인증코드 받기</button>
-    </div>
-
-    <div id="authStep2" style="display:none">
-      <p style="font-size:13px; color:var(--muted); margin: 0 0 12px;">이메일로 받은 6자리 코드를 입력하세요</p>
-      <input type="text" id="authCode" placeholder="123456" inputmode="numeric" />
-      <button class="auth-btn" id="verifyBtn">로그인</button>
-      <button class="auth-back" id="backBtn">← 다시 입력</button>
-    </div>
-
-    <div class="auth-msg" id="authMsg"></div>
-  </div>
-</div>
-
 <!-- ========== 메인 앱 ========== -->
-<div id="app" style="display:none">
+<div id="app">
 <div class="wrap">
   <header>
     <div class="header-row">
       <h1>매출 관리 — 수빈</h1>
       <div class="header-right">
         <span class="sync-label" id="syncLabel"></span>
-        <span class="user-email" id="userEmail"></span>
-        <button class="logout-btn" id="logoutBtn">로그아웃</button>
         <div class="controls">
           <input type="number" id="year" min="2020" max="2099" />
           <span class="label">년</span>
@@ -975,91 +909,13 @@ document.querySelectorAll('.quick-nav button').forEach(btn => {
 });
 
 /* ============================================================
- * 인증
- * ============================================================ */
-let pendingEmail = '';
-
-function showAuthStep(n) {
-  document.getElementById('authStep1').style.display = n === 1 ? 'block' : 'none';
-  document.getElementById('authStep2').style.display = n === 2 ? 'block' : 'none';
-}
-
-function showAuthMsg(t, type) {
-  const el = document.getElementById('authMsg');
-  el.textContent = t;
-  el.className = 'auth-msg ' + (type || '');
-}
-
-document.getElementById('sendBtn').addEventListener('click', async () => {
-  const email = document.getElementById('authEmail').value.trim();
-  if (!email || !/.+@.+\..+/.test(email)) return showAuthMsg('올바른 이메일을 입력해주세요', 'err');
-  const btn = document.getElementById('sendBtn');
-  btn.disabled = true; btn.textContent = '전송 중…';
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-  btn.disabled = false; btn.textContent = '인증코드 받기';
-  if (error) return showAuthMsg('실패: ' + error.message, 'err');
-  pendingEmail = email;
-  document.getElementById('authMsg').className = 'auth-msg';
-  showAuthStep(2);
-});
-
-document.getElementById('verifyBtn').addEventListener('click', async () => {
-  const code = document.getElementById('authCode').value.trim();
-  if (!/^\d{4,10}$/.test(code)) return showAuthMsg('숫자 코드를 입력해주세요', 'err');
-  const btn = document.getElementById('verifyBtn');
-  btn.disabled = true; btn.textContent = '확인 중…';
-  const { error } = await supabase.auth.verifyOtp({ email: pendingEmail, token: code, type: 'email' });
-  btn.disabled = false; btn.textContent = '로그인';
-  if (error) showAuthMsg('인증 실패: ' + error.message, 'err');
-});
-
-document.getElementById('backBtn').addEventListener('click', () => {
-  showAuthStep(1);
-  document.getElementById('authMsg').className = 'auth-msg';
-});
-
-document.getElementById('authEmail').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sendBtn').click(); }
-});
-document.getElementById('authCode').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('verifyBtn').click(); }
-});
-
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await supabase.auth.signOut();
-});
-
-function showApp(on) {
-  document.getElementById('authOverlay').style.display = on ? 'none' : 'flex';
-  document.getElementById('app').style.display = on ? 'block' : 'none';
-}
-
-/* ============================================================
  * 앱 초기화
  * ============================================================ */
-async function initApp(user) {
-  document.getElementById('userEmail').textContent = user.email || '';
-  showApp(true);
+(async () => {
   showView('calendar');
   state.data = await Storage.pull();
   setMonth(state.year, state.month);
   setSyncLabel('saved');
-}
-
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
-  if (session?.user) {
-    initApp(session.user);
-  } else {
-    showApp(false);
-    showAuthStep(1);
-  }
-});
-
-(async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) initApp(session.user);
-  else showApp(false);
 })();
 </script>
 </body>
