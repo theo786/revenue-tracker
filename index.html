@@ -187,10 +187,19 @@
   .status-btn.done { border-color: rgba(255,185,60,0.6); color: rgb(255,185,60); background: rgba(255,185,60,0.12); }
   .status-btn.paid { border-color: rgba(80,220,130,0.6); color: rgb(80,220,130); background: rgba(80,220,130,0.12); }
 
-  /* 행 접기 */
-  .cell.label.row-label { cursor: pointer; gap: 4px; }
-  .cell.label.row-label:hover { color: var(--accent); }
-  .row-toggle-arrow { font-size: 8px; opacity: .6; }
+  /* 슬롯 행 숨기기 */
+  .cell.label.slot-label { cursor: default; position: relative; justify-content: space-between; }
+  .slot-cat-name { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1.3; }
+  .slot-toggle-btn {
+    flex-shrink: 0; background: transparent; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 4px; width: 18px; height: 18px;
+    font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: .12s; font-family: inherit;
+  }
+  .slot-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cell.label.slot-label.slot-hidden { min-height: 8px !important; padding: 2px 4px !important; }
+  .cell.label.slot-label.slot-hidden .slot-cat-name { display: none; }
   .row-collapsed-cell { min-height: 8px !important; padding: 0 !important; opacity: .25; pointer-events: none; }
 
   .cell.muted-day {
@@ -617,13 +626,13 @@ function toggleCollapse(idx) {
   renderCalendar();
 }
 
-const collapsedRows = new Set();
-function rowKey(weekIdx, cat) { return `${monthKey(state.year, state.month)}-${weekIdx}-${cat}`; }
-function isRowCollapsed(weekIdx, cat) { return collapsedRows.has(rowKey(weekIdx, cat)); }
-function toggleRowCollapse(weekIdx, cat) {
-  const k = rowKey(weekIdx, cat);
-  if (collapsedRows.has(k)) collapsedRows.delete(k);
-  else collapsedRows.add(k);
+const collapsedSlots = new Set();
+function slotKey(weekIdx, cat, slot) { return `${monthKey(state.year, state.month)}-${weekIdx}-${cat}-${slot}`; }
+function isSlotCollapsed(weekIdx, cat, slot) { return collapsedSlots.has(slotKey(weekIdx, cat, slot)); }
+function toggleSlotCollapse(weekIdx, cat, slot) {
+  const k = slotKey(weekIdx, cat, slot);
+  if (collapsedSlots.has(k)) collapsedSlots.delete(k);
+  else collapsedSlots.add(k);
   renderCalendar();
 }
 
@@ -699,42 +708,45 @@ function renderWeek(week, weekIndex) {
   }
 
   if (!collapsed) {
-    const whtCollapsed = isRowCollapsed(weekIndex, 'wht');
-    const kmongCollapsed = isRowCollapsed(weekIndex, 'kmong');
-
-    // 3.3% 원천 행
-    if (whtCollapsed) {
-      html += `<div class="cell label row-label" data-row-toggle="${weekIndex}-wht" title="펼치기"><span class="row-toggle-arrow">▶</span> 3.3% 원천</div>`;
-      for (let i = 0; i < 7; i++) html += `<div class="cell wht row-collapsed-cell"></div>`;
-      html += `<div class="cell subtotal row-collapsed-cell"><span class="stk-value" style="font-size:11px;">${fmt(whtTotal)||'-'}</span></div>`;
-    } else {
-      for (let s = 0; s < WHT_SLOTS; s++) {
-        if (s === 0) html += `<div class="cell label row-label" style="grid-row: span ${WHT_SLOTS}" data-row-toggle="${weekIndex}-wht" title="접기"><span class="row-toggle-arrow">▼</span> 3.3%<br>원천</div>`;
+    // 3.3% 원천 행 (슬롯별 개별 숨기기)
+    for (let s = 0; s < WHT_SLOTS; s++) {
+      const hidden = isSlotCollapsed(weekIndex, 'wht', s);
+      if (hidden) {
+        html += `<div class="cell label slot-label slot-hidden" data-slot-toggle="${weekIndex}-wht-${s}" title="행 펼치기">
+          <button class="slot-toggle-btn">＋</button>
+        </div>`;
+        for (let i = 0; i < 7; i++) html += `<div class="cell wht row-collapsed-cell"></div>`;
+        html += `<div class="cell subtotal row-collapsed-cell"></div>`;
+      } else {
+        html += `<div class="cell label slot-label">
+          <span class="slot-cat-name">${s === 0 ? '3.3%<br>원천' : ''}</span>
+          <button class="slot-toggle-btn" data-slot-toggle="${weekIndex}-wht-${s}" title="행 숨기기">－</button>
+        </div>`;
         for (const d of week) html += entryCellHtml(d, 'wht', s);
-        if (s === 0) {
-          html += `<div class="cell subtotal" style="grid-row: span ${WHT_SLOTS}">
-            <span class="stk-label">원천</span>
-            <span class="stk-value">${fmt(whtTotal)}</span>
-          </div>`;
-        }
+        html += s === 0
+          ? `<div class="cell subtotal"><span class="stk-label">원천</span><span class="stk-value">${fmt(whtTotal)}</span></div>`
+          : `<div class="cell" style="background:var(--panel-2)"></div>`;
       }
     }
 
-    // 크몽 행
-    if (kmongCollapsed) {
-      html += `<div class="cell label row-label" data-row-toggle="${weekIndex}-kmong" title="펼치기"><span class="row-toggle-arrow">▶</span> 크몽</div>`;
-      for (let i = 0; i < 7; i++) html += `<div class="cell kmong row-collapsed-cell"></div>`;
-      html += `<div class="cell subtotal row-collapsed-cell"><span class="stk-value" style="font-size:11px;">${fmt(kmongTotal)||'-'}</span></div>`;
-    } else {
-      for (let s = 0; s < KMONG_SLOTS; s++) {
-        if (s === 0) html += `<div class="cell label row-label" style="grid-row: span ${KMONG_SLOTS}" data-row-toggle="${weekIndex}-kmong" title="접기"><span class="row-toggle-arrow">▼</span> 크몽</div>`;
+    // 크몽 행 (슬롯별 개별 숨기기)
+    for (let s = 0; s < KMONG_SLOTS; s++) {
+      const hidden = isSlotCollapsed(weekIndex, 'kmong', s);
+      if (hidden) {
+        html += `<div class="cell label slot-label slot-hidden" data-slot-toggle="${weekIndex}-kmong-${s}" title="행 펼치기">
+          <button class="slot-toggle-btn">＋</button>
+        </div>`;
+        for (let i = 0; i < 7; i++) html += `<div class="cell kmong row-collapsed-cell"></div>`;
+        html += `<div class="cell subtotal row-collapsed-cell"></div>`;
+      } else {
+        html += `<div class="cell label slot-label">
+          <span class="slot-cat-name">${s === 0 ? '크몽' : ''}</span>
+          <button class="slot-toggle-btn" data-slot-toggle="${weekIndex}-kmong-${s}" title="행 숨기기">－</button>
+        </div>`;
         for (const d of week) html += entryCellHtml(d, 'kmong', s);
-        if (s === 0) {
-          html += `<div class="cell subtotal" style="grid-row: span ${KMONG_SLOTS}">
-            <span class="stk-label">크몽</span>
-            <span class="stk-value">${fmt(kmongTotal)}</span>
-          </div>`;
-        }
+        html += s === 0
+          ? `<div class="cell subtotal"><span class="stk-label">크몽</span><span class="stk-value">${fmt(kmongTotal)}</span></div>`
+          : `<div class="cell" style="background:var(--panel-2)"></div>`;
       }
     }
   }
@@ -787,10 +799,11 @@ function attachInputEvents() {
     });
   });
 
-  document.querySelectorAll('[data-row-toggle]').forEach(el => {
-    el.addEventListener('click', () => {
-      const [weekIdx, cat] = el.dataset.rowToggle.split('-');
-      toggleRowCollapse(+weekIdx, cat);
+  document.querySelectorAll('[data-slot-toggle]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const [weekIdx, cat, slot] = el.dataset.slotToggle.split('-');
+      toggleSlotCollapse(+weekIdx, cat, +slot);
     });
   });
 }
